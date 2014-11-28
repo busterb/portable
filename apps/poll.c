@@ -77,10 +77,9 @@ wsa_select_errno(int err)
 		break;
 	case WSAEFAULT:
 		/*
-		 * Windows uses WSAEFAULT for both resource
-		 * allocation failures and arguments not being
-		 * contained in the user's address space. So,
-		 * we have to choose EFAULT or ENOMEM.
+		 * Windows uses WSAEFAULT for both resource allocation failures
+		 * and arguments not being contained in the user's address
+		 * space. So, we have to choose EFAULT or ENOMEM.
 		 */
 		errno = EFAULT;
 		break;
@@ -95,13 +94,11 @@ wsa_select_errno(int err)
 		break;
 	case WSAENOTSOCK:
 		/*
-		 * poll(2) obviously does not normally set
-		 * ENOTSOCK, the only fix would be to replace
-		 * select with something like
-		 * WaitForMultipleObjects. But the original
-		 * select(2) uses in openssl(1) would have
-		 * already been broken already if they used
-		 * file descriptors with select.
+		 * poll(2) obviously does not normally set ENOTSOCK, the only
+		 * fix would be to replace select with something like
+		 * WaitForMultipleObjects. But the original select(2) uses in
+		 * openssl(1) would have already been broken already if they
+		 * used file descriptors with select.
 		 */
 		errno = ENOTSOCK;
 		break;
@@ -109,6 +106,29 @@ wsa_select_errno(int err)
 	return -1;
 }
 
+static int
+valid_fds(struct pollfd *pfds, nfds_t nfds)
+{
+	nfds_t i, valid_nfds;
+
+	if (pfds == NULL)
+		return 0;
+
+	/*
+	 * Only fail if the number of valid fds is > FD_SETSIZE
+	 * E.g. pfds[2000] = { .fd = -1 }; should still work
+	 */
+	valid_nfds = 0;
+	for (i = 0; i < nfds; i++) {
+		if (pfds[i].fd >= 0) {
+			valid_nfds++;
+			if (valid_nfds > FD_SETSIZE)
+				return 0;
+		}
+	}
+
+	return 1;
+}
 
 /* Just select(2) wrapper, ignored unsupported flags. */
 int
@@ -120,7 +140,7 @@ poll(struct pollfd *pfds, nfds_t nfds, int timeout)
 	struct timeval tv;
 	struct timeval *ptv;
 
-	if (pfds == NULL || nfds > FD_SETSIZE) {
+	if (!valid_fds(pfds, nfds)) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -144,10 +164,10 @@ poll(struct pollfd *pfds, nfds_t nfds, int timeout)
 		FD_SET(pfds[i].fd, &efds);
 
 		if (pfds[i].events & (POLLIN | POLLRDNORM | POLLRDBAND))
-			FD_SET (pfds[i].fd, &rfds);
+			FD_SET(pfds[i].fd, &rfds);
 
 		if (pfds[i].events & (POLLOUT | POLLWRNORM | POLLWRBAND))
-			FD_SET (pfds[i].fd, &wfds);
+			FD_SET(pfds[i].fd, &wfds);
 	}
 
 	/* Winsock ignores the first parameter. */
