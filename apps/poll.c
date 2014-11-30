@@ -11,6 +11,7 @@
  * Brent Cook <bcook@openbsd.org>
  */
 
+#include <io.h>
 #include <ws2tcpip.h>
 
 #include <errno.h>
@@ -41,27 +42,53 @@ conn_has_oob_data(int fd)
 }
 
 static int
+is_socket(int fd)
+{
+	WSANETWORKEVENTS events;
+	return (WSAEnumNetworkEvents((SOCKET)fd, NULL, &events) == 0);
+}
+
+static int
 compute_revents(int fd, short events, fd_set *rfds, fd_set *wfds, fd_set *efds)
 {
 	int rc = 0;
 
-	if ((events & (POLLIN | POLLRDNORM | POLLRDBAND)) &&
-			FD_ISSET(fd, rfds)) {
-		if (conn_is_closed(fd))
-			rc |= POLLHUP;
-		else
-			rc |= POLLIN | POLLRDNORM;
+	if (is_socket(fd)) {
+		if ((events & (POLLIN | POLLRDNORM | POLLRDBAND)) &&
+				FD_ISSET(fd, rfds)) {
+			if (conn_is_closed(fd))
+				rc |= POLLHUP;
+			else
+				rc |= POLLIN | POLLRDNORM;
+		}
+
+		if ((events & (POLLOUT | POLLWRNORM | POLLWRBAND)) &&
+				FD_ISSET(fd, wfds))
+			rc |= POLLOUT;
+
+		if (FD_ISSET(fd, efds)) {
+			if (conn_is_closed(fd))
+				rc |= POLLHUP;
+			else if (conn_has_oob_data(fd))
+				rc |= POLLRDBAND | POLLPRI;
+		}
+
 	}
 
-	if ((events & (POLLOUT | POLLWRNORM | POLLWRBAND)) &&
-			FD_ISSET(fd, wfds))
+	return rc;
+}
+
+static int
+compute_wait_revents(short events, int object, int wait_rc)
+{
+	int rc = 0;
+
+	if (events & (POLLOUT | POLLWRNORM))
 		rc |= POLLOUT;
 
-	if (FD_ISSET(fd, efds)) {
-		if (conn_is_closed(fd))
-			rc |= POLLHUP;
-		else if (conn_has_oob_data(fd))
-			rc |= POLLRDBAND | POLLPRI;
+	if (wait_rc >= WAIT_OBJECT_0 && (object == (wait_rc - WAIT_OBJECT_0))) {
+		if (events & (POLLIN | POLLRDNORM))
+			rc |= POLLIN;
 	}
 
 	return rc;
@@ -106,85 +133,111 @@ wsa_select_errno(int err)
 	return -1;
 }
 
-static int
-valid_fds(struct pollfd *pfds, nfds_t nfds)
-{
-	nfds_t i, valid_nfds;
-
-	if (pfds == NULL)
-		return 0;
-
-	/*
-	 * Only fail if the number of valid fds is > FD_SETSIZE
-	 * E.g. pfds[2000] = { .fd = -1 }; should still work
-	 */
-	valid_nfds = 0;
-	for (i = 0; i < nfds; i++) {
-		if (pfds[i].fd >= 0) {
-			valid_nfds++;
-			if (valid_nfds > FD_SETSIZE)
-				return 0;
-		}
-	}
-
-	return 1;
-}
-
-/* Just select(2) wrapper, ignored unsupported flags. */
 int
-poll(struct pollfd *pfds, nfds_t nfds, int timeout)
+poll(struct pollfd *pfds, nfds_t nfds, int timeout_ms)
 {
 	nfds_t i;
-	int rc;
-	fd_set rfds, wfds, efds;
-	struct timeval tv;
-	struct timeval *ptv;
+	int timespent_ms, looptime_ms;
 
-	if (!valid_fds(pfds, nfds)) {
+	/*
+	 * select machinery
+	 */
+	fd_set rfds, wfds, efds;
+	int rc;
+	int num_sockets = 0;
+
+	/*
+	 * wait machinery
+	 */
+	DWORD wait_rc = 0;
+	HANDLE handles[FD_SETSIZE];
+	int num_handles = 0;
+
+	if (pfds == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (timeout < 0) {
-		ptv = NULL;
-	} else {
-		ptv = &tv;
-		ptv->tv_sec = timeout / 1000;
-		ptv->tv_usec = (timeout % 1000) * 1000;
+	if (nfds <= 0) {
+		return 0;
 	}
+
+	if (timeout_ms < 0) {
+		timeout_ms = INFINITE;
+	}
+	looptime_ms = timeout_ms > 100 ? 100 : timeout_ms;
 
 	FD_ZERO(&rfds);
 	FD_ZERO(&wfds);
 	FD_ZERO(&efds);
 
 	for (i = 0; i < nfds; i++) {
-		if (pfds[i].fd < 0)
+		if ((int)pfds[i].fd < 0) {
 			continue;
+		}
 
-		FD_SET(pfds[i].fd, &efds);
+		if (is_socket(pfds[i].fd)) {
+			if (num_sockets >= FD_SETSIZE) {
+				errno = EINVAL;
+				return -1;
+			}
 
-		if (pfds[i].events & (POLLIN | POLLRDNORM | POLLRDBAND))
-			FD_SET(pfds[i].fd, &rfds);
+			FD_SET(pfds[i].fd, &efds);
 
-		if (pfds[i].events & (POLLOUT | POLLWRNORM | POLLWRBAND))
-			FD_SET(pfds[i].fd, &wfds);
+			if (pfds[i].events & (POLLIN | POLLRDNORM | POLLRDBAND)) {
+				FD_SET(pfds[i].fd, &rfds);
+			}
+
+			if (pfds[i].events & (POLLOUT | POLLWRNORM | POLLWRBAND)) {
+				FD_SET(pfds[i].fd, &wfds);
+			}
+			num_sockets++;
+
+		} else {
+			if (num_handles >= FD_SETSIZE) {
+				errno = EINVAL;
+				return -1;
+			}
+
+			handles[num_handles++] = (HANDLE)_get_osfhandle(pfds[i].fd);
+		}
 	}
 
-	/* Winsock ignores the first parameter. */
-	rc = select(0, &rfds, &wfds, &efds, ptv);
-	if (rc == SOCKET_ERROR)
-		return wsa_select_errno(WSAGetLastError());
+	timespent_ms = 0;
+	do {
+		struct timeval tv = {0, looptime_ms * 1000};
+
+		if (num_handles) {
+			wait_rc = WaitForMultipleObjects(num_handles, handles, FALSE, 0);
+			if (wait_rc == WAIT_FAILED) {
+				return 0;
+			}
+		}
+
+		rc = select(0, &rfds, &wfds, &efds, &tv);
+		if (rc == SOCKET_ERROR) {
+			return wsa_select_errno(WSAGetLastError());
+		}
+
+		timespent_ms += looptime_ms;
+	} while (timespent_ms < timeout_ms);
 
 	rc = 0;
+	num_handles = 0;
 	for (i = 0; i < nfds; i++) {
 		pfds[i].revents = 0;
 
-		if (pfds[i].fd < 0)
+		if ((int)pfds[i].fd < 0)
 			continue;
 
-		pfds[i].revents = compute_revents(pfds[i].fd, pfds[i].events,
-			&rfds, &wfds, &efds);
+		if (is_socket(pfds[i].fd)) {
+			pfds[i].revents = compute_revents(pfds[i].fd,
+			    pfds[i].events, &rfds, &wfds, &efds);
 
+		} else {
+			pfds[i].revents = compute_wait_revents(pfds[i].events,
+			    num_handles++, wait_rc);
+		}
 		if (pfds[i].revents)
 			rc++;
 	}
