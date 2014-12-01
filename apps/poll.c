@@ -54,26 +54,23 @@ compute_select_revents(int fd, short events,
 {
 	int rc = 0;
 
-	if (is_socket(fd)) {
-		if ((events & (POLLIN | POLLRDNORM | POLLRDBAND)) &&
-				FD_ISSET(fd, rfds)) {
-			if (conn_is_closed(fd))
-				rc |= POLLHUP;
-			else
-				rc |= POLLIN | POLLRDNORM;
-		}
+	if ((events & (POLLIN | POLLRDNORM | POLLRDBAND)) &&
+			FD_ISSET(fd, rfds)) {
+		if (conn_is_closed(fd))
+			rc |= POLLHUP;
+		else
+			rc |= POLLIN | POLLRDNORM;
+	}
 
-		if ((events & (POLLOUT | POLLWRNORM | POLLWRBAND)) &&
-				FD_ISSET(fd, wfds))
-			rc |= POLLOUT;
+	if ((events & (POLLOUT | POLLWRNORM | POLLWRBAND)) &&
+			FD_ISSET(fd, wfds))
+		rc |= POLLOUT;
 
-		if (FD_ISSET(fd, efds)) {
-			if (conn_is_closed(fd))
-				rc |= POLLHUP;
-			else if (conn_has_oob_data(fd))
-				rc |= POLLRDBAND | POLLPRI;
-		}
-
+	if (FD_ISSET(fd, efds)) {
+		if (conn_is_closed(fd))
+			rc |= POLLHUP;
+		else if (conn_has_oob_data(fd))
+			rc |= POLLRDBAND | POLLPRI;
 	}
 
 	return rc;
@@ -163,6 +160,10 @@ poll(struct pollfd *pfds, nfds_t nfds, int timeout_ms)
 	nfds_t i;
 	int timespent_ms, looptime_ms;
 
+#define FD_IS_SOCKET (1 << 0)
+	int fd_state[FD_SETSIZE];
+	int num_fds;
+
 	/*
 	 * select machinery
 	 */
@@ -189,6 +190,7 @@ poll(struct pollfd *pfds, nfds_t nfds, int timeout_ms)
 	FD_ZERO(&rfds);
 	FD_ZERO(&wfds);
 	FD_ZERO(&efds);
+	num_fds = 0;
 	num_sockets = 0;
 	num_handles = 0;
 
@@ -203,13 +205,17 @@ poll(struct pollfd *pfds, nfds_t nfds, int timeout_ms)
 				return -1;
 			}
 
+			fd_state[num_fds] = FD_IS_SOCKET;
+
 			FD_SET(pfds[i].fd, &efds);
 
-			if (pfds[i].events & (POLLIN | POLLRDNORM | POLLRDBAND)) {
+			if (pfds[i].events &
+			    (POLLIN | POLLRDNORM | POLLRDBAND)) {
 				FD_SET(pfds[i].fd, &rfds);
 			}
 
-			if (pfds[i].events & (POLLOUT | POLLWRNORM | POLLWRBAND)) {
+			if (pfds[i].events &
+			    (POLLOUT | POLLWRNORM | POLLWRBAND)) {
 				FD_SET(pfds[i].fd, &wfds);
 			}
 			num_sockets++;
@@ -220,8 +226,11 @@ poll(struct pollfd *pfds, nfds_t nfds, int timeout_ms)
 				return -1;
 			}
 
-			handles[num_handles++] = (HANDLE)_get_osfhandle(pfds[i].fd);
+			handles[num_handles++] =
+			    (HANDLE)_get_osfhandle(pfds[i].fd);
 		}
+
+		num_fds++;
 	}
 
 	/*
@@ -296,21 +305,26 @@ poll(struct pollfd *pfds, nfds_t nfds, int timeout_ms)
 
 	rc = 0;
 	num_handles = 0;
+	num_fds = 0;
 	for (i = 0; i < nfds; i++) {
 		pfds[i].revents = 0;
 
 		if ((int)pfds[i].fd < 0)
 			continue;
 
-		if (is_socket(pfds[i].fd)) {
+		if (fd_state[num_fds] & FD_IS_SOCKET) {
 			pfds[i].revents = compute_select_revents(pfds[i].fd,
 			    pfds[i].events, &rfds, &wfds, &efds);
 
 		} else {
-			pfds[i].revents = compute_wait_revents(handles[num_handles],
-			    pfds[i].events, num_handles, wait_rc);
+			pfds[i].revents = compute_wait_revents(
+			    handles[num_handles], pfds[i].events, num_handles,
+			    wait_rc);
 			num_handles++;
 		}
+
+		num_fds++;
+
 		if (pfds[i].revents)
 			rc++;
 	}
