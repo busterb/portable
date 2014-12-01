@@ -133,7 +133,7 @@ copy_crypto bf "bf_skey.c bf_ecb.c bf_enc.c bf_cfb64.c bf_ofb64.c bf_locl.h bf_p
 copy_crypto bio "bio_lib.c bio_cb.c bio_err.c bss_mem.c bss_null.c bss_fd.c
 	bss_file.c bss_sock.c bss_conn.c bf_null.c bf_buff.c b_dump.c
 	b_sock.c bss_acpt.c bf_nbio.c bss_log.c bss_bio.c bss_dgram.c b_print.c
-	b_os.c b_os_win.c"
+	b_posix.c b_win.c"
 
 copy_crypto bn "bn_add.c bn_asm.c bn_div.c bn_exp.c bn_lib.c bn_ctx.c bn_mul.c
 	bn_mod.c bn_print.c bn_rand.c bn_shift.c bn_word.c bn_blind.c bn_kron.c
@@ -398,11 +398,11 @@ crypto_excludes=(
 	poly1305/poly1305-donna.c
 	)
 crypto_posix_only=(
-	bio/b_os.c
+	bio/b_posix.c
 	ui/ui_openssl.c
 	)
 crypto_win32_only=(
-	bio/b_os_win.c
+	bio/b_win.c
 	ui/ui_openssl_win.c
 	)
 (cd crypto
@@ -447,10 +447,10 @@ apps_excludes=(
 	strtonum.c
 	)
 apps_posix_only=(
-	os.c
+	apps_posix.c
 	)
 apps_win32_only=(
-	os_win.c
+	apps_win.c
 	)
 (cd apps
 	$CP Makefile.am.tpl Makefile.am
