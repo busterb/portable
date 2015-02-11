@@ -13,6 +13,11 @@ AC_SUBST([USER_CFLAGS], "-O2 $CFLAGS")
 CFLAGS="$CFLAGS -Wall -std=gnu99 -g"
 
 case $host_os in
+	*aix*)
+		HOST_OS=aix
+		CFLAGS=""
+		AC_SUBST([PLATFORM_LDADD], ['-lperfstat -lpthread'])
+		;;
 	*darwin*)
 		HOST_OS=darwin
 		HOST_ABI=macosx
@@ -59,6 +64,7 @@ case $host_cpu in
 		;;
 esac
 
+AM_CONDITIONAL([HOST_AIX],     [test x$HOST_OS = xaix])
 AM_CONDITIONAL([HOST_DARWIN],  [test x$HOST_OS = xdarwin])
 AM_CONDITIONAL([HOST_FREEBSD], [test x$HOST_OS = xfreebsd])
 AM_CONDITIONAL([HOST_HPUX],    [test x$HOST_OS = xhpux])
