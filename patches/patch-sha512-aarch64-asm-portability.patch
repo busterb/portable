@@ -1,0 +1,64 @@
+--- crypto/sha/sha512_aarch64_ce.S.orig	2026-04-12 14:47:54
++++ crypto/sha/sha512_aarch64_ce.S	2026-04-13 14:54:02
+@@ -15,6 +15,8 @@
+  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++#include "asm_aarch64.h"
++
+ /*
+  * SHA-512 implementation using the ARM Cryptographic Extension (CE).
+  *
+@@ -160,15 +162,16 @@
+ 
+ .arch	armv8-a+sha3
+ 
+-.section .text
++ASM_SECTION_TEXT
+ 
+ /*
+  * void sha512_block_ce(SHA512_CTX *ctx, const void *in, size_t num);
+  *
+  * Standard ARM ABI: x0 = ctx, x1 = in, x2 = num
+  */
+-.globl	sha512_block_ce
+-sha512_block_ce:
++.globl	ASM_SYMBOL(sha512_block_ce)
++ASM_TYPE_FUNCTION(sha512_block_ce)
++ASM_SYMBOL(sha512_block_ce):
+ 
+ 	/* Save low 64 bits of v8 through v15 to the stack. */
+ 	sub	sp, sp, #32
+@@ -177,8 +180,8 @@
+ 	st4	{v12.d, v13.d, v14.d, v15.d}[0], [sp]
+ 
+ 	/* Address of SHA-512 constants. */
+-	adrp	k512_base, K512
+-	add	k512_base, k512_base, :lo12:K512
++	adrp	k512_base, ASM_PAGE(K512)
++	add	k512_base, k512_base, ASM_PAGEOFF(K512)
+ 
+ 	/*
+ 	 * Load current hash state from context.
+@@ -291,13 +294,13 @@
+ 
+ 	ret
+ 
+-.section .rodata
++ASM_SECTION_RODATA
+ 
+ /*
+  * SHA-512 constants - see FIPS 180-4 section 4.2.3.
+  */
+ .align	4
+-.type	K512,@object
++ASM_TYPE_OBJECT(K512)
+ K512:
+ .quad	0x428a2f98d728ae22, 0x7137449123ef65cd, 0xb5c0fbcfec4d3b2f, 0xe9b5dba58189dbbc
+ .quad	0x3956c25bf348b538, 0x59f111f1b605d019, 0x923f82a4af194f9b, 0xab1c5ed5da6d8118
+@@ -319,4 +322,4 @@
+ .quad	0x06f067aa72176fba, 0x0a637dc5a2c898a6, 0x113f9804bef90dae, 0x1b710b35131c471b
+ .quad	0x28db77f523047d84, 0x32caab7b40c72493, 0x3c9ebe0a15c9bebc, 0x431d67c49c100d4c
+ .quad	0x4cc5d4becb3e42b6, 0x597f299cfc657e2a, 0x5fcb6fab3ad6faec, 0x6c44198c4a475817
+-.size	K512,.-K512
++ASM_SIZE(K512)

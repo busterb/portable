@@ -1,0 +1,32 @@
+--- crypto/sha/sha1_aarch64_ce.S.orig	2026-04-12 14:47:54
++++ crypto/sha/sha1_aarch64_ce.S	2026-04-13 14:51:25
+@@ -15,6 +15,8 @@
+  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++#include "asm_aarch64.h"
++
+ /*
+  * SHA-1 implementation using the ARM Cryptographic Extension (CE).
+  *
+@@ -100,16 +102,16 @@
+ 
+ .arch	armv8-a+sha2
+ 
+-.section .text
++ASM_SECTION_TEXT
+ 
+ /*
+  * void sha1_block_ce(SHA256_CTX *ctx, const void *in, size_t num);
+  *
+  * Standard ARM ABI: x0 = ctx, x1 = in, x2 = num
+  */
+-.globl	sha1_block_ce
+-.type   sha1_block_ce,@function
+-sha1_block_ce:
++.globl	ASM_SYMBOL(sha1_block_ce)
++ASM_TYPE_FUNCTION(sha1_block_ce)
++ASM_SYMBOL(sha1_block_ce):
+ 
+ 	/*
+ 	 * Load SHA-1 round constants.

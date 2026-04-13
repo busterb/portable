@@ -206,6 +206,7 @@ libcrypto_la_SOURCES =
 EXTRA_libcrypto_la_SOURCES =
 
 include Makefile.am.elf-aarch64
+include Makefile.am.macosx-aarch64
 include Makefile.am.elf-mips
 include Makefile.am.elf-mips64
 include Makefile.am.elf-x86_64
@@ -410,6 +411,7 @@ if HOST_AARCH64
 libcrypto_la_CPPFLAGS += -I$(top_srcdir)/crypto/arch/aarch64/
 libcrypto_la_CPPFLAGS += -I$(top_srcdir)/crypto/bn/arch/aarch64/
 endif
+noinst_HEADERS += arch/aarch64/asm_aarch64.h
 noinst_HEADERS += arch/aarch64/crypto_arch.h
 noinst_HEADERS += bn/arch/aarch64/bn_arch.h
 

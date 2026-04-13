@@ -1,0 +1,60 @@
+--- crypto/sha/sha256_aarch64_ce.S.orig	2026-04-12 14:47:54
++++ crypto/sha/sha256_aarch64_ce.S	2026-04-13 14:51:54
+@@ -15,6 +15,8 @@
+  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++#include "asm_aarch64.h"
++
+ /*
+  * SHA-256 implementation using the ARM Cryptographic Extension (CE).
+  *
+@@ -91,20 +93,20 @@
+ 
+ .arch	armv8-a+sha2
+ 
+-.section .text
++ASM_SECTION_TEXT
+ 
+ /*
+  * void sha256_block_ce(SHA256_CTX *ctx, const void *in, size_t num);
+  *
+  * Standard ARM ABI: x0 = ctx, x1 = in, x2 = num
+  */
+-.globl	sha256_block_ce
+-.type   sha256_block_ce,@function
+-sha256_block_ce:
++.globl	ASM_SYMBOL(sha256_block_ce)
++ASM_TYPE_FUNCTION(sha256_block_ce)
++ASM_SYMBOL(sha256_block_ce):
+ 
+ 	/* Address of SHA-256 constants. */
+-	adrp	k256_base, K256
+-	add	k256_base, k256_base, :lo12:K256
++	adrp	k256_base, ASM_PAGE(K256)
++	add	k256_base, k256_base, ASM_PAGEOFF(K256)
+ 
+ 	/*
+ 	 * Load current hash state from context.
+@@ -170,13 +172,13 @@
+ 
+ 	ret
+ 
+-.section .rodata
++ASM_SECTION_RODATA
+ 
+ /*
+  * SHA-256 constants - see FIPS 180-4 section 4.2.3.
+  */
+ .align	4
+-.type	K256,@object
++ASM_TYPE_OBJECT(K256)
+ K256:
+ .long	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5
+ .long	0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5
+@@ -194,4 +196,4 @@
+ .long	0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3
+ .long	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208
+ .long	0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+-.size	K256,.-K256
++ASM_SIZE(K256)
