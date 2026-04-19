@@ -1,9 +1,9 @@
 We should consider a OPENSSL_NO_BN_ASM if we can't figure
 out how to fix BIGNUM on this OS
 
---- crypto/bn/arch/amd64/bn_arch.h.orig	Fri Oct 24 07:06:10 2025
-+++ crypto/bn/arch/amd64/bn_arch.h	Fri Oct 24 07:06:22 2025
-@@ -20,8 +20,14 @@
+--- crypto/bn/arch/amd64/bn_arch.h.orig
++++ crypto/bn/arch/amd64/bn_arch.h
+@@ -20,8 +20,46 @@
  #ifndef HEADER_BN_ARCH_H
  #define HEADER_BN_ARCH_H
  
@@ -11,14 +11,46 @@ out how to fix BIGNUM on this OS
  #ifndef OPENSSL_NO_ASM
 +#define OPENSSL_NO_ASM
 +#endif
-+#else
  
++#if defined(_WIN64) && defined(_MSC_VER)
++#include <intrin.h>
++
++#define HAVE_BN_ADDW
++
++static inline void
++bn_addw(BN_ULONG a, BN_ULONG b, BN_ULONG *out_r1, BN_ULONG *out_r0)
++{
++	unsigned char carry;
++	carry = _addcarry_u64(0, a, b, (unsigned __int64 *)out_r0);
++	*out_r1 = carry;
++}
++
++#define HAVE_BN_SUBW
++
++static inline void
++bn_subw(BN_ULONG a, BN_ULONG b, BN_ULONG *out_borrow, BN_ULONG *out_r0)
++{
++	*out_borrow = _subborrow_u64(0, a, b, (unsigned __int64 *)out_r0);
++}
++
++#define HAVE_BN_MULW
++
++static inline void
++bn_mulw(BN_ULONG a, BN_ULONG b, BN_ULONG *out_r1, BN_ULONG *out_r0)
++{
++	*out_r0 = _umul128(a, b, (unsigned __int64 *)out_r1);
++}
++
++#endif /* _WIN64 && _MSC_VER */
++
++#else
++
 +#ifndef OPENSSL_NO_ASM
 +
  #define HAVE_BN_ADD
  #define HAVE_BN_ADD_WORDS
  
-@@ -110,6 +116,7 @@ bn_subw(BN_ULONG a, BN_ULONG b, BN_ULONG *out_borrow, 
+@@ -110,6 +148,7 @@
  }
  
  #endif /* __GNUC__ */
